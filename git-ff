@@ -1,0 +1,126 @@
+#!/bin/bash
+
+#   Simple fast-forward without working tree
+
+#   Advances the branch ref if it is and ancestror of target.
+#   No need of a working tree as it does not try to merge but uses git
+#   merge-base.
+#
+#   use an alias in .gitconfig:
+#     ff   = !git-ff "$@"
+#
+#   author: piotr.lesnicki@ext.bull.net
+
+set -euo pipefail
+
+
+git_merge_status() {
+    ## pre: ref and upstream are correct refs
+    local ref="$1"
+    local upstream="$2"
+    if [[ $(git rev-parse "$ref") == $(git rev-parse "$upstream") ]]; then
+        echo "up-to-date"
+    elif git merge-base --is-ancestor "$ref" "$upstream"; then
+        n=$(git rev-list "${ref}..${upstream}" | wc -l)
+        echo "behind $n"
+    elif git merge-base --is-ancestor "$upstream" "$ref"; then
+        n=$(git rev-list "${upstream}..${ref}" | wc -l)
+        echo "ahead $n"
+    else
+        echo "merge/rebase required"
+    fi
+    return 0
+}
+
+
+gitff() {
+    local branch="$1"
+
+    if [[ "$branch" == "" ]]; then
+	branch=$(git rev-parse --abbrev-ref HEAD)
+    fi
+
+    if ! git show-ref --heads -q "$branch"; then
+        echo "error: branch '$branch' is not a local head reference" >&2
+        return 1
+    fi
+    branch=$(git show-ref --heads "$branch" | cut -d' ' -f2)
+
+    if ! branch_sha=$(git rev-parse --verify -q "$branch"); then
+        echo "error: branch '$branch' invalid"
+        return 1
+    fi
+
+    if ! upstream=$(git rev-parse --symbolic-full-name --verify -q "${branch#refs/heads/}@{upstream}" 2>/dev/null); then
+        echo "error: branch '$branch' is not tracking anything" >&2
+        return 1
+    fi
+
+    local status=$(git_merge_status "$branch" "$upstream")
+    printf "%-20s %-25s : %-s\n" "${branch#refs/}" "[${upstream#refs/}]" "$status"
+    case "$status" in
+        behind*) printf "  fast-forwarding %s..%s\n" $() \
+            $(git rev-parse --short "$branch") $(git rev-parse --short "$upstream");;
+        ahead*) 
+            local remote=$(echo "${upstream#refs/remotes/}" | cut -d'/' -f 1)
+            local upref=$(echo "${upstream#refs/remotes/}" | cut -d'/' -f 2-)
+            echo "  you can push: git push $remote ${branch#refs/}:${upref}"
+            return 0;;
+        up-to-date) return 0;;
+        merge*) echo "  merge/rebase required"; return 0;;
+        *) echo "bad status" >&2; return 1;;
+    esac
+
+
+    here we update the branch
+    if ! git update-ref "$branch" "$upstream"; then
+        echo "error: failed to update ref '$branch' to '$upstream'" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+gitff_all() {
+    git for-each-ref --shell --format='ref=%(refname); up=%(upstream);' refs/heads/ | while read entry; do
+        eval "$entry"
+        if [[ -n "$up" ]]; then
+            gitff "$ref" || true
+        fi
+    done
+}
+
+
+
+gitff_all_status() {
+    git for-each-ref --shell --format='ref=%(refname); up=%(upstream);' refs/heads/ | while read entry; do
+        eval "$entry"
+        if [[ -n "$up" ]]; then
+            local status=$(git_merge_status "$ref" "$up")
+            printf "%-20s %-25s : %-s\n" "${ref#refs/}" "[${up#refs/}]" "$status"
+        fi
+    done
+}
+
+
+if [[ "$BASH_SOURCE" == "$0" ]]; then
+    arg="${1:-}"
+    if [[ "$arg" == "-h" ]] || [[ "$arg" == "--help" ]]; then
+        echo "usage: $0 <branch> || --all || --status"
+        echo "  fast-forward branch <branch>"
+        exit 1
+    fi
+
+    if [[ "$arg" == "--status" ]]; then
+        gitff_all_status
+        exit
+    elif [[ "$arg" == "--all" ]]; then
+        gitff_all
+        exit 0
+    else
+        if ! gitff "$arg"; then
+            exit 1
+        fi
+        exit 0
+    fi
+fi
