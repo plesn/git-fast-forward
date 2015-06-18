@@ -51,7 +51,8 @@ gitff() {
         return 1
     fi
 
-    if ! upstream=$(git rev-parse --symbolic-full-name --verify -q "${branch#refs/heads/}@{upstream}" 2>/dev/null); then
+    if ! upstream=$(git rev-parse --symbolic-full-name \
+            --verify -q "${branch#refs/heads/}@{upstream}" 2>/dev/null); then
         echo "error: branch '$branch' is not tracking anything" >&2
         return 1
     fi
@@ -59,20 +60,26 @@ gitff() {
     local status=$(git_merge_status "$branch" "$upstream")
     printf "%-20s %-25s : %-s\n" "${branch#refs/}" "[${upstream#refs/}]" "$status"
     case "$status" in
-        behind*) printf "  fast-forwarding %s..%s\n" $() \
-            $(git rev-parse --short "$branch") $(git rev-parse --short "$upstream");;
+        behind*)
+            printf "  fast-forwarding %s..%s\n" $() \
+                $(git rev-parse --short "$branch") \
+                $(git rev-parse --short "$upstream")
+            ;;
         ahead*) 
             local remote=$(echo "${upstream#refs/remotes/}" | cut -d'/' -f 1)
             local upref=$(echo "${upstream#refs/remotes/}" | cut -d'/' -f 2-)
             echo "  you can push: git push $remote ${branch#refs/}:${upref}"
-            return 0;;
+            return 0
+            ;;
         up-to-date) return 0;;
-        merge*) echo "  merge/rebase required"; return 0;;
-        *) echo "bad status" >&2; return 1;;
+        merge*) echo "  merge/rebase required"; return 0
+            ;;
+        *) echo "bad status" >&2; return 1
+            ;;
     esac
 
 
-    here we update the branch
+    ## here we update the branch
     if ! git update-ref "$branch" "$upstream"; then
         echo "error: failed to update ref '$branch' to '$upstream'" >&2
         return 1
@@ -82,7 +89,8 @@ gitff() {
 }
 
 gitff_all() {
-    git for-each-ref --shell --format='ref=%(refname); up=%(upstream);' refs/heads/ | while read entry; do
+    git for-each-ref --shell --format='ref=%(refname); up=%(upstream);' \
+        refs/heads/ | while read entry; do
         eval "$entry"
         if [[ -n "$up" ]]; then
             gitff "$ref" || true
@@ -93,11 +101,13 @@ gitff_all() {
 
 
 gitff_all_status() {
-    git for-each-ref --shell --format='ref=%(refname); up=%(upstream);' refs/heads/ | while read entry; do
+    git for-each-ref --shell --format='ref=%(refname); up=%(upstream);' \
+        refs/heads/ | while read entry; do
         eval "$entry"
         if [[ -n "$up" ]]; then
             local status=$(git_merge_status "$ref" "$up")
-            printf "%-20s %-25s : %-s\n" "${ref#refs/}" "[${up#refs/}]" "$status"
+            printf "%-20s %-25s : %-s\n" \
+                "${ref#refs/}" "[${up#refs/}]" "$status"
         fi
     done
 }
