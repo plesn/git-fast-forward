@@ -13,6 +13,16 @@
 
 set -euo pipefail
 
+git_is_ancestor() {
+    local a="$1"
+    local b="$2"
+    if git merge-base --is-ancestor 2>/dev/null ; then
+        git merge-base --is-ancestor "$a" "$b"
+    else
+        local common=$(git merge-base "$a" "$b")
+        [[ "$common" == $(git rev-parse "$a") ]]
+    fi
+}
 
 git_merge_status() {
     ## pre: ref and upstream are correct refs
@@ -20,10 +30,10 @@ git_merge_status() {
     local upstream="$2"
     if [[ $(git rev-parse "$ref") == $(git rev-parse "$upstream") ]]; then
         echo "up-to-date"
-    elif git merge-base --is-ancestor "$ref" "$upstream"; then
+    elif git_is_ancestor "$ref" "$upstream"; then
         n=$(git rev-list "${ref}..${upstream}" | wc -l)
         echo "behind $n"
-    elif git merge-base --is-ancestor "$upstream" "$ref"; then
+    elif git_is_ancestor "$upstream" "$ref"; then
         n=$(git rev-list "${upstream}..${ref}" | wc -l)
         echo "ahead $n"
     else
