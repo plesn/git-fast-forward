@@ -14,6 +14,7 @@
 set -euo pipefail
 
 git_is_ancestor() {
+    ## git merge-base has no `--is-ancestor` option in v1.7
     local a="$1"
     local b="$2"
     if git merge-base --is-ancestor 2>/dev/null ; then
@@ -39,7 +40,6 @@ git_merge_status() {
     else
         echo "merge/rebase required"
     fi
-    return 0
 }
 
 
@@ -57,7 +57,7 @@ gitff() {
     branch=$(git show-ref --heads "$branch" | cut -d' ' -f2)
 
     if ! branch_sha=$(git rev-parse --verify -q "$branch"); then
-        echo "error: branch '$branch' invalid"
+        echo "error: branch '$branch' invalid" >&2
         return 1
     fi
 
@@ -94,8 +94,6 @@ gitff() {
         echo "error: failed to update ref '$branch' to '$upstream'" >&2
         return 1
     fi
-
-    return 0
 }
 
 gitff_all() {
@@ -126,21 +124,17 @@ gitff_all_status() {
 if [[ "$BASH_SOURCE" == "$0" ]]; then
     arg="${1:-}"
     if [[ "$arg" == "-h" ]] || [[ "$arg" == "--help" ]]; then
-        echo "usage: $0 <branch> || --all || --status"
-        echo "  fast-forward branch <branch>"
+        echo "usage: $0 <branch> || --all || --status" >&2
+        echo "  fast-forward branch <branch>" >&2
         exit 1
     fi
 
-    if [[ "$arg" == "--status" ]]; then
-        gitff_all_status
-        exit
-    elif [[ "$arg" == "--all" ]]; then
-        gitff_all
-        exit 0
-    else
-        if ! gitff "$arg"; then
-            exit 1
-        fi
-        exit 0
-    fi
+    case "$arg" in
+        "-s" | "--status") gitff_all_status;;
+        "-a" | "--all")    gitff_all;;
+        -*)
+            echo "error: unknown option '$arg'" >&2
+            exit 1;;
+        *)                 gitff "$arg";;
+    esac
 fi
