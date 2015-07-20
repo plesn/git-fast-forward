@@ -71,7 +71,7 @@ gitff() {
     printf "%-20s %-25s : %-s\n" "${branch#refs/}" "[${upstream#refs/}]" "$status"
     case "$status" in
         behind*)
-            printf "  fast-forwarding %s..%s\n" $() \
+            printf "  fast-forwarding %s..%s\n"  \
                 $(git rev-parse --short "$branch") \
                 $(git rev-parse --short "$upstream")
             ;;
